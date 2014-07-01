@@ -1,25 +1,11 @@
-var Promise = require('bluebird'),
-	Room = require('./room'),
-	io = require('./io'),
+var rooms = require('./rooms'),
 	auth = require('./auth');
 
-var rooms = {};
-
-function roomExists(name) {
-	if (! name) return false;
-	if (! rooms[String(name)]) return false;
-	return true;
-}
-
-/**
- * Events
- */
-
-var toExport = function(io, socket) {
+var toExport = function(socket) {
 	socket.on('join-room', function(data) {
 		var name = String(data.name);
 
-		if (! roomExists(name)) {
+		if (! rooms.exists(name)) {
 			socket.emit('join-room:fail');
 			return;
 		}
@@ -30,7 +16,7 @@ var toExport = function(io, socket) {
 			return;
 		}
 
-		rooms[name].addClient(clientInfo);
+		rooms.get(name).addClient(clientInfo);
 	});
 
 	socket.on('leave-room', function(data) {
@@ -42,12 +28,12 @@ var toExport = function(io, socket) {
 			return;
 		}
 
-		if (! roomExists(name)) {
+		if (! rooms.exists(name)) {
 			socket.emit('leave-room:fail');
 			return;
 		}
 
-		rooms[name].removeClient(clientInfo);
+		rooms.get(name).removeClient(clientInfo);
 	});
 
 	socket.on('disconnect', function() {
@@ -55,10 +41,10 @@ var toExport = function(io, socket) {
 			clientInfo = auth.getClientInfoBySocket(socket),
 			i, len;
 
-		for (i = 0, len = sRooms.length; i < len; i++) {
-			var name = sRooms[i];
-			rooms[name].removeClient(clientInfo);
-		}
+		sRooms.forEach(function(sRoom) {
+			if (! rooms.exists(sRoom)) return;
+			rooms.get(sRoom).removeClient(clientInfo);
+		});
 	});
 
 	socket.on('create-room', function(data) {
@@ -70,36 +56,41 @@ var toExport = function(io, socket) {
 			return;
 		}
 
-		if (roomExists(name)) {
+		if (rooms.exists(name)) {
 			socket.emit('create-room:fail');
 			return;
 		}
 
-		rooms[name] = new Room(name);
-		rooms[name].addAdmin(clientInfo);
-		rooms[name].addClient(clientInfo);
+		var room = rooms.create(name);
+
+		if (room !== null) {
+			room.addAdmin(clientInfo);
+			room.addClient(clientInfo);
+		}
 	});
 
 	socket.on('delete-room', function(data) {
 		var name = String(data.name);
 		var clientInfo = auth.getClientInfoBySocket(socket);
 
-		if (! clientInfo || ! roomExists(name)) {
+		if (! clientInfo || ! rooms.exists(name)) {
 			socket.emit('delete-room:fail');
 			return;
 		}
 
-		if (rooms[name].isAdmin(clientInfo) || clientInfo.permissions.canDeleteRooms) {
-			rooms[name].delete();
-			delete rooms[name];
+		var room = rooms.get(name);
+
+		if (room.hasAdmin(clientInfo) || clientInfo.permissions.canDeleteRooms) {
+			room.delete();
 		} else {
 			socket.emit('delete-room:fail');
 		}
 	});
 
 	socket.on('send-message', function(data) {
-		var name = String(name),
-			message = String(message);
+		var name = String(data.name),
+			message = String(data.message);
+
 		var clientInfo = auth.getClientInfoBySocket(socket);
 
 		// Missing required data
@@ -113,30 +104,33 @@ var toExport = function(io, socket) {
 		}
 
 		// Room doesn't exist
-		if (! roomExists(name)) {
+		if (! rooms.exists(name)) {
 			return;
 		}
+
+		var room = rooms.get(name);
 
 		// Client not in room
-		if (! rooms[name].isInRoom(clientInfo)) {
+		if (! room.hasClient(clientInfo)) {
 			return;
 		}
 
-		rooms[name].sendMessage(clientInfo, message);
+		room.sendMessage(clientInfo, message);
 	});
 
-	socket.on('get-messages', function() {
-		var name = String(name),
-			num = parseInt(num, 10);
+	socket.on('get-messages', function(data) {
+		var name = String(data.name),
+			num = parseInt(data.num, 10) || 0,
+			start = parseInt(data.start, 10) || 0;
 
-		if (! roomExists[name]) {
+		if (! rooms.exists(name)) {
 			socket.emit('get-messages:fail');
 			return;
 		}
 
 		socket.emit('loaded-messages', {
 			name: name,
-			messages: rooms[name].getMessages(num)
+			messages: rooms.get(name).getMessages(num, start)
 		});
 	});
 };

@@ -1,12 +1,23 @@
-var _ = require('lodash'),
-	io = require('./io'),
-	auth = require('./auth');
+var _ = require('lodash');
+
+function objValues(obj) {
+	var vals = [];
+
+	for (var prop in obj) {
+		if (! obj.hasOwnProperty(prop)) continue;
+		vals.push(obj[prop]);
+	}
+
+	return vals;
+}
 
 function Room(name) {
 	this.name = name;
 	this.messages = [];
-	this.admins = [];
-	this.clients = [];
+	this.admins   = {}; // Admins indexed by clientId
+	this.clients  = {}; // Clients indexed by clientId
+
+	this.messageId = 1;
 
 	this.listeners = {};
 }
@@ -14,91 +25,91 @@ function Room(name) {
 Room.prototype.getInfo = function() {
 	return {
 		name: name,
-		admins: this.admins,
-		clients: this.clients
+		admins: objValues(this.admins),
+		clients: objValues(this.clients)
 	};
 };
 
 Room.prototype.addClient = function(clientInfo) {
-	if (_.indexOf(this.clients, clientInfo._clientId) > -1) return;
+	if (this.clients[clientInfo._clientId]) return;
+	this.clients[clientInfo._clientId] = clientInfo;
 
-	var socket = auth.getSocketByClientId(clientInfo._clientId);
-
-	socket.join(this.name);
-	socket.emit('join-room', this.getInfo());
-	io.to(this.name).emit('room:client-joined', {name: this.name, client: clientInfo});
+	this.emit('client-added', {client: clientInfo});
 };
 
 Room.prototype.removeClient = function(clientInfo) {
-	var clientIndex = _.indexOf(this.clients, clientInfo._clientId);
-	if (clientIndex === -1) return;
+	if (! this.clients[clientInfo._clientId]) return;
+	delete this.clients[clientInfo._clientId];
 
-	this.clients.splice(clientIndex, 1);
-
-	var socket = auth.getSocketByClientId(clientInfo._clientId);
-
-	socket.leave(this.name);
-	socket.emit('leave-room', {name: this.name});
-	io.to(this.name).emit('room:client-left', {name: this.name, client: clientInfo});
+	this.emit('client-removed', {client: clientInfo});
 };
 
-Room.prototype.isInRoom = function(clientInfo) {
-	return (_.indexOf(this.clients, clientInfo._clientId) > -1);
+Room.prototype.hasClient = function(clientInfo) {
+	return (typeof this.clients[clientInfo._clientId] !== 'undefined');
 };
 
 Room.prototype.addAdmin = function(clientInfo) {
-	if (_.indexOf(this.admins, clientInfo._clientId) > -1) return;
-	io.to(this.name).emit('room:admin-added', {name: this.name, admin: clientInfo});
+	if (this.admins[clientInfo._clientId]) return;
+	this.admins[clientInfo._clientId] = clientInfo;
+
+	this.emit('admin-added', {admin: clientInfo});
 };
 
 Room.prototype.removeAdmin = function(clientInfo) {
-	if (_.indexOf(this.admins, clientInfo._clientId) === -1) return;
-	io.to(this.name).emit('room:admin-removed', {name: this.name, admin: clientInfo});
+	if (! this.admins[clientInfo._clientId]) return;
+	delete this.admins[clientInfo._clientId];
+
+	this.emit('admin-removed', {admin: clientInfo});
 };
 
-Room.prototype.isAdmin = function(clientInfo) {
-	return (_.indexOf(this.admins, clientInfo._clientId) > -1);
+Room.prototype.hasAdmin = function(clientInfo) {
+	return (typeof this.admins[clientInfo._clientId] !== 'undefined');
 };
 
 Room.prototype.sendMessage = function(clientInfo, message) {
-	var messageObj = {sender: clientInfo, message: message};
+	var messageObj = {
+		id: this.messageId++,
+		client: clientInfo,
+		message: message
+	};
+
 	this.messages.push(messageObj);
-	io.to(this.name).emit('room:message', _.assign({name: this.name}, messageObj));
+	this.emit('new-message', {message: message});
 };
 
-// TODO: "Since"
-Room.prototype.getMessages = function(num) {
+Room.prototype.getMessages = function(num, start) {
 	num = parseInt(num, 10);
-	if (num <= 0) return [];
+	start = parseInt(start, 10);
 
-	return this.messages.slice(-1 * num);
+	if (num <= 0) return [];
+	if (start <= 0) start = 0;
+
+	return this.messages.slice(-1 * start - num, -1 * start);
 };
 
 Room.prototype.clearMessages = function() {
 	this.messages.splice(0, this.messages.length);
-	io.to(this.name).emit('room:messages-cleared', {name: this.name});
+	this.emit('messages-cleared');
 };
 
 Room.prototype.delete = function() {
-	io.to(this.name).emit('room:deleted', {name: this.name});
-
-	var i, len;
-	for (i = 0, len = this.clients.length; i < len; i++) {
-		var socket = auth.getSocketByClientId(this.clients[i]._clientId);
-		socket.leave(this.name);
-	}
-
+	this.emit('room-deleted');
 	this.clients.splice(0, this.clients.length);
+	this.admins.splice(0, this.admins.length);
 };
+
+/**
+ * Events
+ */
 
 Room.prototype.on = function(event, callback) {
 	this.listeners[event] = this.listeners[event] || [];
 	this.listeners[event].push(callback);
 };
 
-Room.prototype.trigger = function(event, data) {
+Room.prototype.emit = function(event, data) {
 	if (! this.listeners[event]) return;
-	
+
 	this.listeners[event].forEach(function(listener) {
 		listener(data);
 	});

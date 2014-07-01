@@ -19,7 +19,7 @@ var baseClientInfo = {
 function authenticate(socket, data) {
 	var type, handler, info;
 
-	// No auth type/name specified
+	// No auth type specified
 	if (! data.type) {
 		return Promise.reject(new Error('Auth type not specified.'));
 	}
@@ -65,9 +65,10 @@ function clear(socket) {
 
 	delete clientsBySocketId[socket.id];
 	delete clientsByClientId[clientInfo._clientId];
+	delete socketsByClientId[clientInfo._clientId];
 }
 
-var toExport = function(io, socket) {
+var toExport = function(socket) {
 	socket.on('auth', function(data) {
 		authenticate(socket, data)
 			.then(function(clientInfo) {
@@ -80,8 +81,8 @@ var toExport = function(io, socket) {
 	});
 
 	socket.on('disconnect', function() {
-		clear(socket);
 		io.emit('client:leave-global', clientInfo);
+		clear(socket);
 	});
 };
 
