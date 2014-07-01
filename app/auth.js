@@ -1,5 +1,6 @@
 var Promise = require('bluebird'),
-	_ = require('lodash');
+	_ = require('lodash'),
+	io = require('./io');
 
 var authConfig = require('../config/auth.json'),
 
@@ -17,7 +18,7 @@ var baseClientInfo = {
 
 // Authenticates the client. Returns a promise.
 function authenticate(socket, data) {
-	var type, handler, info;
+	var type, handler;
 
 	// No auth type specified
 	if (! data.type) {
@@ -33,13 +34,12 @@ function authenticate(socket, data) {
 
 	try {
 		handler = require(authConfig.enabled[type]);
-		info = handler.info();
 	} catch (e) {
 		return Promise.reject(new Error('Auth handler could not be initialized.'));
 	}
 
 	// Attempt authentication
-	handler.attempt(data)
+	return handler.attempt(data)
 		// Success
 		.then(function(clientInfo) {
 			// Make sure all base properties are present in client info
@@ -55,6 +55,8 @@ function authenticate(socket, data) {
 			clientsByClientId[clientId]  = clientInfo;
 			clientsBySocketId[socket.id] = clientInfo;
 			socketsByClientId[clientId]  = socket;
+
+			return clientInfo;
 		});
 }
 
@@ -81,6 +83,7 @@ var toExport = function(socket) {
 	});
 
 	socket.on('disconnect', function() {
+		var clientInfo = toExport.getClientInfoForSocket(socket);
 		io.emit('client:leave-global', clientInfo);
 		clear(socket);
 	});

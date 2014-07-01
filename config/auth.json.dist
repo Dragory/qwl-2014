@@ -1,3 +1,6 @@
 {
-	"enabled": ["qwl-auth-plain"]
+	"enabled": {
+		"anon": "qwl-auth-plain",
+		"my-forum": "qwl-auth-smf"
+	}
 }

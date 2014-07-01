@@ -2,6 +2,13 @@ var _ = require('lodash');
 
 var permissions = {};
 
+var globalDefaults = {
+	canSendMessages: true,
+	canCreateRooms: false,
+	canDeleteRooms: false,
+	canJoinRooms: true
+};
+
 /**
  * TODO: Save these in Redis.
  */
@@ -10,7 +17,7 @@ function init(clientId, defaultValues) {
 	if (! permissions[clientId]) permissions[clientId] = {};
 	if (! defaultValues) defaultValues = {};
 
-	return _.defaults(permissions[clientId], defaultValues);
+	return _.defaults(permissions[clientId], defaultValues, globalDefaults);
 }
 
 function get(clientId) {

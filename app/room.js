@@ -24,7 +24,7 @@ function Room(name) {
 
 Room.prototype.getInfo = function() {
 	return {
-		name: name,
+		name: this.name,
 		admins: objValues(this.admins),
 		clients: objValues(this.clients)
 	};
@@ -74,7 +74,7 @@ Room.prototype.sendMessage = function(clientInfo, message) {
 	};
 
 	this.messages.push(messageObj);
-	this.emit('new-message', {message: message});
+	this.emit('new-message', messageObj);
 };
 
 Room.prototype.getMessages = function(num, start) {
@@ -114,3 +114,5 @@ Room.prototype.emit = function(event, data) {
 		listener(data);
 	});
 };
+
+module.exports = Room;

@@ -41,7 +41,7 @@ module.exports = {
 		});
 
 		room.on('new-message', function(data) {
-			io.to(room.name).emit('room:new-message', {name: room.name, message: data.message});
+			io.to(room.name).emit('room:new-message', {name: room.name, message: data});
 		});
 
 		room.on('messages-cleared', function(data) {

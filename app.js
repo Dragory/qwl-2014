@@ -1,2 +1,2 @@
-var qwl = require('app/qwl');
+var qwl = require('./app/qwl');
 qwl.boot();

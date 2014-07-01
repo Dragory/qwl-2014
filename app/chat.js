@@ -1,18 +1,23 @@
 var rooms = require('./rooms'),
-	auth = require('./auth');
+	auth = require('./auth'),
+	config = require('../config/config.json');
+
+config.defaultRooms.forEach(function(room) {
+	rooms.create(room);
+});
 
 var toExport = function(socket) {
 	socket.on('join-room', function(data) {
 		var name = String(data.name);
 
 		if (! rooms.exists(name)) {
-			socket.emit('join-room:fail');
+			socket.emit('join-room:fail', {error: "Room doesn't exist."});
 			return;
 		}
 
-		var clientInfo = auth.getClientInfoBySocket(socket);
+		var clientInfo = auth.getClientInfoForSocket(socket);
 		if (! clientInfo || ! clientInfo.permissions.canJoinRooms) {
-			socket.emit('join-room:fail');
+			socket.emit('join-room:fail', {error: "You are not authorized to join that room."});
 			return;
 		}
 
@@ -21,7 +26,7 @@ var toExport = function(socket) {
 
 	socket.on('leave-room', function(data) {
 		var name = String(data.name),
-			clientInfo = auth.getClientInfoBySocket(socket);
+			clientInfo = auth.getClientInfoForSocket(socket);
 
 		if (! clientInfo) {
 			socket.emit('leave-room:fail');
@@ -38,7 +43,7 @@ var toExport = function(socket) {
 
 	socket.on('disconnect', function() {
 		var sRooms = socket.rooms,
-			clientInfo = auth.getClientInfoBySocket(socket),
+			clientInfo = auth.getClientInfoForSocket(socket),
 			i, len;
 
 		sRooms.forEach(function(sRoom) {
@@ -49,7 +54,7 @@ var toExport = function(socket) {
 
 	socket.on('create-room', function(data) {
 		var name = String(data.name);
-		var clientInfo = auth.getClientInfoBySocket(socket);
+		var clientInfo = auth.getClientInfoForSocket(socket);
 
 		if (! clientInfo || ! clientInfo.permissions.canCreateRooms) {
 			socket.emit('create-room:fail');
@@ -71,7 +76,7 @@ var toExport = function(socket) {
 
 	socket.on('delete-room', function(data) {
 		var name = String(data.name);
-		var clientInfo = auth.getClientInfoBySocket(socket);
+		var clientInfo = auth.getClientInfoForSocket(socket);
 
 		if (! clientInfo || ! rooms.exists(name)) {
 			socket.emit('delete-room:fail');
@@ -91,7 +96,7 @@ var toExport = function(socket) {
 		var name = String(data.name),
 			message = String(data.message);
 
-		var clientInfo = auth.getClientInfoBySocket(socket);
+		var clientInfo = auth.getClientInfoForSocket(socket);
 
 		// Missing required data
 		if (! name || ! message) {
@@ -119,6 +124,8 @@ var toExport = function(socket) {
 	});
 
 	socket.on('get-messages', function(data) {
+		console.log('oooh getting messages');
+
 		var name = String(data.name),
 			num = parseInt(data.num, 10) || 0,
 			start = parseInt(data.start, 10) || 0;
@@ -128,7 +135,7 @@ var toExport = function(socket) {
 			return;
 		}
 
-		socket.emit('loaded-messages', {
+		socket.emit('get-messages', {
 			name: name,
 			messages: rooms.get(name).getMessages(num, start)
 		});
